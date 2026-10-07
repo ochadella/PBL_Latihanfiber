@@ -1,0 +1,50 @@
+@baseUrl = http://localhost:3000/api/v1
+
+# ============================================================
+# TOKEN: jalankan request login (nomor 1 / 3), copy isi
+# "access_token" dari hasilnya, lalu tempel setelah tanda "=".
+# Token berlaku 60 menit. Kalau "Token sudah kedaluwarsa",
+# login ulang dan ganti tokennya.
+# ============================================================
+@tokenMhs = TEMPEL_TOKEN_MAHASISWA_DI_SINI
+@tokenAdmin = TEMPEL_TOKEN_ADMIN_DI_SINI
+
+
+### 1. Login mahasiswa (BERHASIL -> 200)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"187221000001@student.siakad.ac.id","password":"187221000001"}
+
+### 2. Profil mahasiswa yang login (-> 200)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{tokenMhs}}
+
+### 3. Login admin (BERHASIL -> 200)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@siakad.ac.id","password":"admin12345"}
+
+### 4. Profil admin (-> 200)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{tokenAdmin}}
+
+### 5. Password salah (-> 401)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@siakad.ac.id","password":"salahsalah"}
+
+### 6. Validasi gagal (-> 422)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"bukan-email","password":"123"}
+
+### 7. /me tanpa token (-> 401)
+GET {{baseUrl}}/auth/me
+
+### 8. /me dengan token palsu (-> 401)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer tokenpalsu123
