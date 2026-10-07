@@ -37,16 +37,19 @@ func main() {
 	// 3. Repository -> Service
 	userRepo := repository.NewUserRepository(pool)
 	courseRepo := repository.NewCourseRepository(pool)
+	studentRepo := repository.NewStudentRepository(pool)
 
 	authService := service.NewAuthService(userRepo, jwtManager)
 	courseService := service.NewCourseService(courseRepo)
+	studentService := service.NewStudentService(studentRepo)
 
 	// 4. Aplikasi + route
 	app := config.NewApp()
 	route.Register(app, route.Deps{
-		JWT:           jwtManager,
-		AuthService:   authService,
-		CourseService: courseService,
+		JWT:            jwtManager,
+		AuthService:    authService,
+		CourseService:  courseService,
+		StudentService: studentService,
 	})
 
 	port := config.GetEnv("APP_PORT", "3000")
