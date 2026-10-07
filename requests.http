@@ -48,3 +48,25 @@ GET {{baseUrl}}/auth/me
 ### 8. /me dengan token palsu (-> 401)
 GET {{baseUrl}}/auth/me
 Authorization: Bearer tokenpalsu123
+
+
+### ===================== COURSES =====================
+
+### 9. Daftar semua mata kuliah (-> 200)
+GET {{baseUrl}}/courses
+Authorization: Bearer {{tokenMhs}}
+
+### 10. Filter semester 5 + cari "basis" (-> 200)
+GET {{baseUrl}}/courses?semester=5&search=basis
+Authorization: Bearer {{tokenMhs}}
+
+### 11. Hanya yang kuotanya belum penuh (-> 200)
+GET {{baseUrl}}/courses?available=true
+Authorization: Bearer {{tokenMhs}}
+
+### 12. Query tidak valid (-> 422)
+GET {{baseUrl}}/courses?semester=abc&available=ya
+Authorization: Bearer {{tokenMhs}}
+
+### 13. Tanpa token (-> 401)
+GET {{baseUrl}}/courses

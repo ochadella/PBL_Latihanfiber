@@ -10,8 +10,9 @@ import (
 
 // Deps berisi semua service yang dibutuhkan route.
 type Deps struct {
-	JWT         *helper.JWTManager
-	AuthService *service.AuthService
+	JWT           *helper.JWTManager
+	AuthService   *service.AuthService
+	CourseService *service.CourseService
 }
 
 // Register mendaftarkan seluruh endpoint API.
@@ -22,12 +23,17 @@ func Register(app *fiber.App, deps Deps) {
 		return helper.OK(c, "Server berjalan", nil)
 	})
 
+	requireAuth := middleware.RequireAuth(deps.JWT)
+
 	// ---------- AUTH ----------
 	auth := api.Group("/auth")
 	auth.Post("/login", middleware.LoginRateLimiter(), deps.AuthService.Login)
-	auth.Get("/me", middleware.RequireAuth(deps.JWT), deps.AuthService.Me)
+	auth.Get("/me", requireAuth, deps.AuthService.Me)
 
-	// Endpoint students, courses, dan enrollments ditambahkan di langkah berikutnya.
+	// ---------- COURSES (semua role) ----------
+	api.Get("/courses", requireAuth, deps.CourseService.List)
+
+	// Endpoint students dan enrollments ditambahkan di langkah berikutnya.
 
 	// Route yang tidak terdaftar -> 404 dengan format JSON seragam.
 	app.Use(func(c *fiber.Ctx) error {
