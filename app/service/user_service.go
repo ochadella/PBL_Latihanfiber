@@ -79,10 +79,20 @@ func (s *UserService) Create(c *fiber.Ctx) error {
 		return helper.FailValidation(c, errs)
 	}
 
+	// Modul 5: password juga DI-HASH di sini, sama seperti pada register.
+	// Tanpa ini, user yang dibuat lewat POST /users tersimpan dengan
+	// password apa adanya dan tidak akan pernah bisa login.
+	hashed, err := helper.HashPassword(req.Password)
+	if err != nil {
+		return helper.Fail(c, fiber.StatusInternalServerError, "gagal memproses password")
+	}
+
+	// Role selalu ditentukan server, tidak pernah diambil dari request.
 	newUser, err := s.repo.Create(ctx, model.User{
 		Username: req.Username,
 		Email:    req.Email,
-		Password: req.Password,
+		Password: hashed,
+		Role:     "user",
 		IsActive: true,
 	})
 	if err != nil {

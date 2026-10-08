@@ -1,0 +1,94 @@
+# Tes Modul 5 — jalankan berurutan dari atas ke bawah.
+# Token TIDAK perlu dicopas: REST Client mengambilnya otomatis
+# dari response request bernama "login" dan "refresh".
+
+@base = http://localhost:3000/api/v1
+
+### 1. Daftar (harus 201, role selalu "user" walau dikirim "admin")
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "sari",
+  "email": "sari@example.com",
+  "password": "rahasia123",
+  "role": "admin"
+}
+
+### 2. Password lemah ditolak (harus 422 "password terlalu umum")
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "budi",
+  "email": "budi@example.com",
+  "password": "password1"
+}
+
+### 4. Akses tanpa token (harus 401 + header WWW-Authenticate)
+GET {{base}}/users
+
+### 5a. Login password salah (harus 401)
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "sari",
+  "password": "salahsekali9"
+}
+
+### 5b. Login username tidak ada (harus 401, pesannya SAMA PERSIS dengan 5a)
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "tidakada",
+  "password": "salahsekali9"
+}
+
+### 6. Login benar (harus 200, expires_in 900)
+# @name login
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "sari",
+  "password": "rahasia123"
+}
+
+### 7a. Profil sendiri pakai access token (harus 200)
+GET {{base}}/auth/me
+Authorization: Bearer {{login.response.body.$.data.access_token}}
+
+### 7b. Daftar user pakai access token (harus 200)
+GET {{base}}/users
+Authorization: Bearer {{login.response.body.$.data.access_token}}
+
+### 8. Token diubah ujungnya (harus 401 "access token tidak valid")
+GET {{base}}/users
+Authorization: Bearer {{login.response.body.$.data.access_token}}rusak
+
+### 9a. Refresh pertama (harus 200)
+# @name refresh
+POST {{base}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{login.response.body.$.data.refresh_token}}"
+}
+
+### 9b. Refresh token LAMA dipakai lagi (harus 401 — rotasi bekerja)
+POST {{base}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{login.response.body.$.data.refresh_token}}"
+}
+
+### 11. Logout pakai refresh token yang baru (harus 200)
+POST {{base}}/auth/logout
+Content-Type: application/json
+
+{
+  "refresh_token": "{{refresh.response.body.$.data.refresh_token}}"
+}

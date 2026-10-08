@@ -12,7 +12,12 @@ import (
 	"latihan-fiber/app/service"
 	"latihan-fiber/config"
 	"latihan-fiber/database"
+	"latihan-fiber/helper"
+	"latihan-fiber/route"
 )
+
+// minSecretLength adalah panjang minimal JWT_SECRET.
+const minSecretLength = 32
 
 // main hanya berisi urutan perakitan. Tidak ada logika bisnis,
 // tidak ada query, dan tidak ada satu pun handler di sini.
@@ -20,6 +25,15 @@ func main() {
 	// 1. Konfigurasi dan logger
 	config.LoadEnv()
 	logger := config.NewLogger()
+
+	// Rahasia diperiksa SEBELUM server menyala. Lebih baik gagal seketika
+	// daripada berjalan dengan token yang mudah dipalsukan.
+	jwtSecret := config.GetEnv("JWT_SECRET", "")
+	if len(jwtSecret) < minSecretLength {
+		logger.Error("JWT_SECRET tidak diisi atau terlalu pendek",
+			slog.Int("minimal_karakter", minSecretLength))
+		os.Exit(1)
+	}
 
 	// 2. Database
 	pool, err := database.NewPool(context.Background())
@@ -29,12 +43,29 @@ func main() {
 	}
 	defer pool.Close()
 
-	// 3. Perakitan dari dalam ke luar: repository -> service
+	// 3. Perakitan dari dalam ke luar: helper -> repository -> service
+	jwtManager := helper.NewJWTManager(
+		jwtSecret,
+		config.GetEnv("JWT_ISSUER", "praktikum-backend"),
+		time.Duration(config.GetEnvInt("JWT_ACCESS_TTL_MINUTES", 15))*time.Minute,
+	)
+
 	userRepository := repository.NewUserRepository(pool)
+	tokenRepository := repository.NewTokenRepository(pool)
+
 	userService := service.NewUserService(userRepository)
+	authService := service.NewAuthService(
+		userRepository, tokenRepository, jwtManager,
+		time.Duration(config.GetEnvInt("JWT_REFRESH_TTL_DAYS", 7))*24*time.Hour,
+	)
 
 	// 4. Aplikasi
-	app := config.NewApp(logger, pool, userService)
+	app := config.NewApp(logger, route.Dependencies{
+		Pool:        pool,
+		JWT:         jwtManager,
+		UserService: userService,
+		AuthService: authService,
+	})
 
 	port := config.GetEnv("APP_PORT", "3000")
 
