@@ -34,6 +34,11 @@ type PatchUserRequest struct {
 	IsActive *bool   `json:"is_active,omitempty"`
 }
 
+// AssignRoleRequest dipakai endpoint PATCH /users/:id/role (Modul 6).
+type AssignRoleRequest struct {
+	Role string `json:"role"`
+}
+
 // Amplop baku untuk semua respons
 type WebResponse struct {
 	Success bool   `json:"success"`

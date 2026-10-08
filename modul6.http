@@ -1,0 +1,216 @@
+# Tes Modul 6 — RBAC. Jalankan BERURUTAN dari atas ke bawah.
+# Sebelum mulai: tabel users sudah dikosongkan, sehingga id-nya
+# admin = 1, staff = 2, biasa = 3, korban = 4.
+# Token diambil otomatis dari request bernama login..., tidak perlu dicopas.
+
+@base = http://localhost:3000/api/v1
+
+### A1. Daftar akun admin
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "admin", "email": "admin@unair.ac.id", "password": "Rahasia123!" }
+
+### A2. Daftar akun staff
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "staff", "email": "staff@unair.ac.id", "password": "Rahasia123!" }
+
+### A3. Daftar akun biasa
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "biasa", "email": "biasa@unair.ac.id", "password": "Rahasia123!" }
+
+### A4. Daftar akun korban (nanti dihapus admin)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "korban", "email": "korban@unair.ac.id", "password": "Rahasia123!" }
+
+# >>> SEKARANG jalankan perintah UPDATE role lewat psql di terminal, baru lanjut <<<
+
+### B1. Login admin
+# @name loginAdmin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "admin", "password": "Rahasia123!" }
+
+### B2. Login staff
+# @name loginStaff
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "staff", "password": "Rahasia123!" }
+
+### B3. Login biasa
+# @name loginUser
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "biasa", "password": "Rahasia123!" }
+
+### B4. Profil admin — sekarang memuat daftar permissions (200)
+GET {{base}}/auth/me
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+# ================= GET /users =================
+
+### C1. admin GET /users (200)
+GET {{base}}/users
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### C2. staff GET /users (200)
+GET {{base}}/users
+Authorization: Bearer {{loginStaff.response.body.$.data.access_token}}
+
+### C3. user GET /users (403)
+GET {{base}}/users
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+# ================= GET /users/:id — diri sendiri =================
+
+### D1. admin GET dirinya, id 1 (200)
+GET {{base}}/users/1
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### D2. staff GET dirinya, id 2 (200)
+GET {{base}}/users/2
+Authorization: Bearer {{loginStaff.response.body.$.data.access_token}}
+
+### D3. user GET dirinya, id 3 (200)
+GET {{base}}/users/3
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+# ================= GET /users/:id — milik orang lain =================
+
+### E1. admin GET id 3 (200)
+GET {{base}}/users/3
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### E2. staff GET id 3 (200)
+GET {{base}}/users/3
+Authorization: Bearer {{loginStaff.response.body.$.data.access_token}}
+
+### E3. user GET id 1 (403)
+GET {{base}}/users/1
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+# ================= PUT /users/:id — milik orang lain =================
+
+### F1. admin PUT id 3 (200)
+PUT {{base}}/users/3
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "username": "biasa", "email": "biasa.baru@unair.ac.id", "is_active": true }
+
+### F2. staff PUT id 3 (403)
+PUT {{base}}/users/3
+Content-Type: application/json
+Authorization: Bearer {{loginStaff.response.body.$.data.access_token}}
+
+{ "username": "biasa", "email": "biasa@unair.ac.id", "is_active": true }
+
+### F3. user PUT id 1 (403)
+PUT {{base}}/users/1
+Content-Type: application/json
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+{ "username": "admin", "email": "admin@unair.ac.id", "is_active": true }
+
+# ================= DELETE /users/:id — orang lain =================
+
+### G1. staff DELETE id 4 (403)
+DELETE {{base}}/users/4
+Authorization: Bearer {{loginStaff.response.body.$.data.access_token}}
+
+### G2. user DELETE id 4 (403)
+DELETE {{base}}/users/4
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+### G3. admin DELETE id 4 (204)
+DELETE {{base}}/users/4
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+# ================= DELETE /users/:id — diri sendiri =================
+
+### H1. admin DELETE dirinya (403)
+DELETE {{base}}/users/1
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### H2. staff DELETE dirinya (403)
+DELETE {{base}}/users/2
+Authorization: Bearer {{loginStaff.response.body.$.data.access_token}}
+
+### H3. user DELETE dirinya (403)
+DELETE {{base}}/users/3
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+# ================= PATCH /users/:id/role — diri sendiri =================
+
+### I1. admin ubah role dirinya (422 — haknya ada, tapi melanggar aturan)
+PATCH {{base}}/users/1/role
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "role": "user" }
+
+### I2. staff ubah role dirinya (403)
+PATCH {{base}}/users/2/role
+Content-Type: application/json
+Authorization: Bearer {{loginStaff.response.body.$.data.access_token}}
+
+{ "role": "admin" }
+
+### I3. user ubah role dirinya (403)
+PATCH {{base}}/users/3/role
+Content-Type: application/json
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+{ "role": "admin" }
+
+# ================= PATCH /users/:id/role — orang lain =================
+
+### J1. staff ubah role id 3 (403)
+PATCH {{base}}/users/3/role
+Content-Type: application/json
+Authorization: Bearer {{loginStaff.response.body.$.data.access_token}}
+
+{ "role": "staff" }
+
+### J2. user ubah role id 1 (403)
+PATCH {{base}}/users/1/role
+Content-Type: application/json
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+{ "role": "user" }
+
+### J3. admin ubah role id 3 menjadi staff (200)
+PATCH {{base}}/users/3/role
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "role": "staff" }
+
+# ================= Token lama vs token baru =================
+
+### K1. Token LAMA milik biasa masih membawa role "user" (403)
+GET {{base}}/users
+Authorization: Bearer {{loginUser.response.body.$.data.access_token}}
+
+### K2. Login ulang biasa
+# @name loginUserBaru
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "biasa", "password": "Rahasia123!" }
+
+### K3. Token BARU membawa role "staff" (200)
+GET {{base}}/users
+Authorization: Bearer {{loginUserBaru.response.body.$.data.access_token}}
+
+### L1. Tanpa Authorization header (401)
+GET {{base}}/users
