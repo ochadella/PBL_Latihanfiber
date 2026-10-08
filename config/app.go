@@ -1,10 +1,12 @@
 package config
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
 
+	"latihan-fiber/app/model"
 	"latihan-fiber/helper"
 	"latihan-fiber/middleware"
 	"latihan-fiber/route"
@@ -25,32 +27,80 @@ func NewApp(logger *slog.Logger, deps route.Dependencies) *fiber.App {
 	middleware.Register(app, logger, GetEnv("ALLOWED_ORIGINS", ""))
 	route.Register(app, deps)
 
-	// Penampung terakhir untuk URL yang tidak dikenal.
+	// Penampung terakhir untuk URL yang tidak dikenal — kini ikut melewati
+	// jalur yang sama dengan kegagalan lain.
 	app.Use(func(c *fiber.Ctx) error {
-		return helper.Fail(c, fiber.StatusNotFound, "endpoint tidak ditemukan")
+		return helper.NotFound("endpoint tidak ditemukan")
 	})
 
 	return app
 }
 
-// newErrorHandler adalah jaring pengaman terakhir: error yang tidak
-// tertangani di service berakhir di sini dengan format yang tetap konsisten.
+// newErrorHandler adalah SATU-SATUNYA tempat error berubah menjadi
+// response HTTP di seluruh aplikasi.
 func newErrorHandler(logger *slog.Logger) fiber.ErrorHandler {
 	return func(c *fiber.Ctx, err error) error {
-		status := fiber.StatusInternalServerError
-		message := "terjadi error pada server"
+		requestID := helper.RequestID(c)
 
-		if e, ok := err.(*fiber.Error); ok {
-			status = e.Code
-			message = e.Message
+		var appErr *helper.AppError
+
+		switch {
+		case errors.As(err, &appErr):
+			// Kegagalan yang sudah kita rencanakan.
+
+		case errors.Is(err, fiber.ErrRequestEntityTooLarge):
+			appErr = &helper.AppError{
+				Status:  fiber.StatusRequestEntityTooLarge,
+				Code:    "PAYLOAD_TOO_LARGE",
+				Message: "ukuran body melebihi batas yang diizinkan",
+			}
+
+		default:
+			// Kegagalan yang tidak kita duga.
+			var fiberErr *fiber.Error
+			if errors.As(err, &fiberErr) {
+				appErr = &helper.AppError{
+					Status: fiberErr.Code, Code: "HTTP_ERROR",
+					Message: fiberErr.Message,
+				}
+			} else {
+				appErr = helper.Internal(err)
+			}
 		}
 
-		logger.Error("unhandled_error",
-			slog.String("path", c.Path()),
-			slog.Int("status", status),
-			slog.String("error", err.Error()),
-		)
+		// Hanya kegagalan sisi server yang dicatat sebagai Error.
+		// Kegagalan 4xx adalah kesalahan pemakai API, bukan kerusakan
+		// sistem; mencatatnya sebagai Error membuat log penuh bising
+		// sehingga kerusakan yang sesungguhnya justru tenggelam.
+		//
+		// PERBAIKAN #5: pada modul tertulis "<" sehingga tingkatnya
+		// tertukar — 4xx tercatat ERROR, 5xx tercatat WARN.
+		//
+		// PERBAIKAN #1: pada modul tertulis appErr.cause.Error(). Field
+		// cause berhuruf kecil sehingga tidak dapat diakses dari package
+		// config (ditolak compiler). appErr.Error() sudah menyertakan isi
+		// cause, jadi detail teknisnya tetap masuk ke log.
+		if appErr.Status >= fiber.StatusInternalServerError {
+			logger.Error("request_failed",
+				slog.String("request_id", requestID),
+				slog.String("path", c.Path()),
+				slog.String("code", appErr.Code),
+				slog.Int("status", appErr.Status),
+				slog.String("error", appErr.Error()))
+		} else {
+			logger.Warn("request_rejected",
+				slog.String("request_id", requestID),
+				slog.String("path", c.Path()),
+				slog.String("code", appErr.Code),
+				slog.Int("status", appErr.Status))
+		}
 
-		return helper.Fail(c, status, message)
+		return c.Status(appErr.Status).JSON(model.ErrorResponse{
+			Success:   false,
+			Code:      appErr.Code,
+			Message:   appErr.Message,
+			Fields:    appErr.Fields,
+			RequestID: requestID,
+		})
 	}
 }

@@ -1,0 +1,149 @@
+# Tes Modul 7 — Spesifikasi Penerimaan (Bagian C). Jalankan BERURUTAN.
+# Sebelum mulai: migration 004 sudah dijalankan dan 12 user contoh
+# (user1..user12) sudah dimasukkan lewat psql.
+
+@base = http://localhost:3000/api/v1
+
+### 0. Login admin
+# @name loginAdmin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "admin", "password": "Rahasia123!" }
+
+# ================= 9.1 Cursor pagination =================
+
+### 1a. Halaman 1 (terbaru dulu: user12, user11, ... ; has_more true)
+# @name page1
+GET {{base}}/users?limit=5
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### 1b. Halaman 2 (memakai next_cursor dari halaman 1)
+# @name page2
+GET {{base}}/users?limit=5&cursor={{page1.response.body.$.meta.next_cursor}}
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### 1c. Halaman 3 (halaman terakhir: has_more false, TANPA next_cursor)
+GET {{base}}/users?limit=5&cursor={{page2.response.body.$.meta.next_cursor}}
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+# ================= 9.2 Data baru masuk di tengah jalan =================
+
+### 2a. Sisipkan satu user baru (201; 409 bila tes diulang — tidak apa-apa)
+POST {{base}}/users
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "username": "penyusup", "email": "p@x.ac.id", "password": "rahasia99" }
+
+### 2b. Ambil ulang halaman 2 dengan cursor LAMA (isinya harus sama dengan 1b)
+GET {{base}}/users?limit=5&cursor={{page1.response.body.$.meta.next_cursor}}
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+# ================= 9.3 Validasi deklaratif (harus 422) =================
+
+### 3a. Semua salah sekaligus (422, tiga field dilaporkan bersamaan)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "a b!", "email": "bukan-email", "password": "abc" }
+
+### 3b. Password terlalu umum (422)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "coba01", "email": "c@unair.ac.id", "password": "password123" }
+
+### 3c. Password tanpa angka (422)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "coba02", "email": "c@unair.ac.id", "password": "tanpaangka" }
+
+### 3d. Password kuat DITERIMA (201; 409 bila tes diulang)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "coba03", "email": "c3@unair.ac.id", "password": "KuatSekali77" }
+
+### 3e. PATCH username kosong TETAP diperiksa (422 "minimal 3 karakter")
+PATCH {{base}}/users/3
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "username": "" }
+
+### 3f. PATCH tanpa field apa pun (400)
+PATCH {{base}}/users/3
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{}
+
+### 3g. PATCH sah (200)
+PATCH {{base}}/users/3
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "is_active": true }
+
+# ================= 9.4 Content negotiation =================
+
+### 4a. Minta CSV (200, Content-Type text/csv, BERISI data)
+GET {{base}}/users?limit=3
+Accept: text/csv
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### 4b. Minta XML (406 NOT_ACCEPTABLE)
+GET {{base}}/users?limit=3
+Accept: application/xml
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### 4c. Accept */* (200 JSON)
+GET {{base}}/users?limit=3
+Accept: */*
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+# ================= 9.5 Keseragaman response kegagalan =================
+
+### 5a. GET /users/999999 (404 NOT_FOUND)
+GET {{base}}/users/999999
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### 5b. Cursor rusak (400 BAD_REQUEST)
+GET {{base}}/users?cursor=bukanbase64!!
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### 5c. Endpoint tidak ada (404 NOT_FOUND)
+GET {{base}}/tidakada
+
+### 5d. Tanpa token (401 UNAUTHORIZED)
+GET {{base}}/users
+
+### 5e. Content-Type text/plain (415 UNSUPPORTED_MEDIA_TYPE)
+POST {{base}}/users
+Content-Type: text/plain
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+halo
+
+### 5f. JSON rusak (400 BAD_REQUEST)
+POST {{base}}/users
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{rusak
+
+### 5g. is_active bukan boolean (400 BAD_REQUEST)
+GET {{base}}/users?is_active=mungkin
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+# ================= 9.6 Kegagalan server =================
+# Jalankan dulu di terminal:
+#   psql -d praktikum_backend -c "ALTER TABLE users RENAME COLUMN email TO email_x;"
+# lalu kirim request di bawah, lalu KEMBALIKAN:
+#   psql -d praktikum_backend -c "ALTER TABLE users RENAME COLUMN email_x TO email;"
+
+### 6. Database rusak (500 INTERNAL_ERROR, tanpa detail teknis)
+GET {{base}}/users
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
