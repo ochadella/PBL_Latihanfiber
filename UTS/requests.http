@@ -1,0 +1,201 @@
+@baseUrl = http://localhost:3000/api/v1
+
+# ============================================================
+# TOKEN: jalankan request login (nomor 1 / 3), copy isi
+# "access_token" dari hasilnya, lalu tempel setelah tanda "=".
+# Token berlaku 60 menit. Kalau "Token sudah kedaluwarsa",
+# login ulang dan ganti tokennya.
+# PENTING: sebelum commit, kembalikan ke tulisan contoh di bawah.
+# ============================================================
+@tokenMhs = TEMPEL_TOKEN_MAHASISWA_DI_SINI
+@tokenAdmin = TEMPEL_TOKEN_ADMIN_DI_SINI
+
+
+### 1. Login mahasiswa (BERHASIL -> 200)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"187221000001@student.siakad.ac.id","password":"187221000001"}
+
+### 2. Profil mahasiswa yang login (-> 200)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{tokenMhs}}
+
+### 3. Login admin (BERHASIL -> 200)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@siakad.ac.id","password":"admin12345"}
+
+### 4. Profil admin (-> 200)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{tokenAdmin}}
+
+### 5. Password salah (-> 401)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@siakad.ac.id","password":"salahsalah"}
+
+### 6. Validasi gagal (-> 422)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"bukan-email","password":"123"}
+
+### 7. /me tanpa token (-> 401)
+GET {{baseUrl}}/auth/me
+
+### 8. /me dengan token palsu (-> 401)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer tokenpalsu123
+
+
+### ===================== COURSES =====================
+
+### 9. Daftar semua mata kuliah (-> 200)
+GET {{baseUrl}}/courses
+Authorization: Bearer {{tokenMhs}}
+
+### 10. Filter semester 5 + cari "basis" (-> 200)
+GET {{baseUrl}}/courses?semester=5&search=basis
+Authorization: Bearer {{tokenMhs}}
+
+### 11. Hanya yang kuotanya belum penuh (-> 200)
+GET {{baseUrl}}/courses?available=true
+Authorization: Bearer {{tokenMhs}}
+
+### 12. Query tidak valid (-> 422)
+GET {{baseUrl}}/courses?semester=abc&available=ya
+Authorization: Bearer {{tokenMhs}}
+
+### 13. Tanpa token (-> 401)
+GET {{baseUrl}}/courses
+
+
+### ===================== STUDENTS (pakai tokenAdmin) =====================
+
+### 14. Daftar mahasiswa (-> 200)
+GET {{baseUrl}}/students
+Authorization: Bearer {{tokenAdmin}}
+
+### 15. Pagination + sort IPK tertinggi (-> 200)
+GET {{baseUrl}}/students?page=2&per_page=5&sort=-ipk_terakhir
+Authorization: Bearer {{tokenAdmin}}
+
+### 16. Filter prodi + angkatan + search (-> 200)
+GET {{baseUrl}}/students?prodi=Sistem%20Informasi&angkatan=2022&search=rina
+Authorization: Bearer {{tokenAdmin}}
+
+### 17. Daftar mahasiswa sebagai mahasiswa (-> 403)
+GET {{baseUrl}}/students
+Authorization: Bearer {{tokenMhs}}
+
+### 18. Tambah mahasiswa (-> 201, hanya berhasil sekali)
+POST {{baseUrl}}/students
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nim":"187221000099","nama":"Zahra Amelia","email":"zahra@student.siakad.ac.id","prodi":"Sistem Informasi","angkatan":2024,"ipk_terakhir":3.2}
+
+### 19. Tambah mahasiswa dengan NIM/email yang sama (-> 422)
+POST {{baseUrl}}/students
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nim":"187221000099","nama":"Zahra Lagi","email":"zahra@student.siakad.ac.id","prodi":"Sistem Informasi","angkatan":2024}
+
+### 20. Tambah mahasiswa data tidak valid (-> 422)
+POST {{baseUrl}}/students
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nim":"123","email":"bukan-email","angkatan":2099,"ipk_terakhir":5}
+
+### 21. Detail mahasiswa id 1 sebagai admin (-> 200)
+GET {{baseUrl}}/students/1
+Authorization: Bearer {{tokenAdmin}}
+
+### 22. Mahasiswa lihat data sendiri, Rina = id 1 (-> 200)
+GET {{baseUrl}}/students/1
+Authorization: Bearer {{tokenMhs}}
+
+### 23. Mahasiswa lihat data orang lain (-> 403)
+GET {{baseUrl}}/students/2
+Authorization: Bearer {{tokenMhs}}
+
+### 24. Detail id tidak ada (-> 404)
+GET {{baseUrl}}/students/9999
+Authorization: Bearer {{tokenAdmin}}
+
+### 25. Update mahasiswa (-> 200)
+PUT {{baseUrl}}/students/1
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nama":"Rina Putri","prodi":"Sistem Informasi","angkatan":2022,"ipk_terakhir":3.45}
+
+### 26. Update mencoba ubah NIM (-> 422)
+PUT {{baseUrl}}/students/1
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nim":"111111111111","nama":"Rina Putri","prodi":"Sistem Informasi","angkatan":2022}
+
+### 27. Soft delete mahasiswa id 20 (-> 204)
+DELETE {{baseUrl}}/students/20
+Authorization: Bearer {{tokenAdmin}}
+
+### 28. Hapus lagi id yang sama (-> 404)
+DELETE {{baseUrl}}/students/20
+Authorization: Bearer {{tokenAdmin}}
+
+
+### ===================== ENROLLMENTS / KRS (pakai tokenMhs) =====================
+
+### 29. Ambil mata kuliah MK001 (-> 201)
+POST {{baseUrl}}/enrollments
+Authorization: Bearer {{tokenMhs}}
+Content-Type: application/json
+
+{"course_id":1,"tahun_akademik":"2026/2027-Ganjil"}
+
+### 30. Ambil MK001 lagi di tahun yang sama (-> 409)
+POST {{baseUrl}}/enrollments
+Authorization: Bearer {{tokenMhs}}
+Content-Type: application/json
+
+{"course_id":1,"tahun_akademik":"2026/2027-Ganjil"}
+
+### 31. Mata kuliah tidak ada (-> 422)
+POST {{baseUrl}}/enrollments
+Authorization: Bearer {{tokenMhs}}
+Content-Type: application/json
+
+{"course_id":999,"tahun_akademik":"2026/2027-Ganjil"}
+
+### 32. Format tahun akademik salah (-> 422)
+POST {{baseUrl}}/enrollments
+Authorization: Bearer {{tokenMhs}}
+Content-Type: application/json
+
+{"course_id":2,"tahun_akademik":"2026-Ganjil"}
+
+### 33. Admin mencoba ambil mata kuliah (-> 403)
+POST {{baseUrl}}/enrollments
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"course_id":2,"tahun_akademik":"2026/2027-Ganjil"}
+
+### 34. Cek KRS sendiri lewat detail mahasiswa (-> 200, lihat enrollment_id)
+GET {{baseUrl}}/students/1
+Authorization: Bearer {{tokenMhs}}
+
+### 35. Batalkan KRS -> GANTI angka 1 dengan "id" dari hasil nomor 29 (-> 204)
+DELETE {{baseUrl}}/enrollments/1
+Authorization: Bearer {{tokenMhs}}
+
+### 36. Batalkan KRS yang tidak ada (-> 404)
+DELETE {{baseUrl}}/enrollments/99999
+Authorization: Bearer {{tokenMhs}}
