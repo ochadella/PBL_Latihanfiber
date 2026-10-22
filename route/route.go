@@ -15,11 +15,12 @@ import (
 // Dependencies mengumpulkan semua kebutuhan route dalam satu struct,
 // agar penambahan service berikutnya tidak mengubah tanda tangan function.
 type Dependencies struct {
-	Pool        *pgxpool.Pool
-	JWT         *helper.JWTManager
-	Permissions *helper.PermissionSet
-	UserService *service.UserService
-	AuthService *service.AuthService
+	Pool          *pgxpool.Pool
+	JWT           *helper.JWTManager
+	Permissions   *helper.PermissionSet
+	UserService   *service.UserService
+	AuthService   *service.AuthService
+	CourseService *service.CourseService
 }
 
 // Register memetakan URL ke method pada service.
@@ -65,6 +66,26 @@ func Register(app *fiber.App, deps Dependencies) {
 	users.Get("/:id", deps.UserService.Get)
 	users.Put("/:id", deps.UserService.Replace)
 	users.Patch("/:id", deps.UserService.Patch)
+
+	// --- kelas dan KRS (Modul 9) ---
+	courses := api.Group("/courses",
+		middleware.RequireJSON,
+		middleware.RequireAuth(deps.JWT))
+
+	// "/mine" didaftarkan SEBELUM "/:id". Fiber mencocokkan route sesuai
+	// urutan pendaftaran; bila dibalik, "mine" akan dianggap sebagai :id.
+	courses.Get("/", deps.CourseService.List)
+	courses.Get("/mine", deps.CourseService.Mine)
+	courses.Get("/:id", deps.CourseService.Get)
+	courses.Post("/:id/enroll", deps.CourseService.Enroll)
+	courses.Delete("/:id/enroll", deps.CourseService.Drop)
+	courses.Patch("/:id", middleware.RequirePermission(perms, "course:manage"),
+		deps.CourseService.UpdateQuota)
+
+	enrollments := api.Group("/enrollments",
+		middleware.RequireJSON,
+		middleware.RequireAuth(deps.JWT))
+	enrollments.Post("/swap", deps.CourseService.Swap)
 }
 
 // healthCheck melaporkan kondisi layanan beserta databasenya.

@@ -1,0 +1,113 @@
+# Tes fungsional Modul 9 (C.4). Jalankan BERURUTAN.
+# Id kelas: IF101=1, IF102=2, IF303=5, IF310=12, IF399=13.
+# Sebelum mulai: reset, lalu "go run ./tools/loadtest -mode crowd" sekali
+# supaya IF399 berisi 5 peserta (untuk tes nomor 4 dan 6).
+
+@base = http://localhost:3000/api/v1
+
+### 0a. Daftar akun mahasiswa uji (201; 409 bila sudah pernah dibuat — tidak apa-apa)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "mhsuji", "email": "mhsuji@unair.ac.id", "password": "Rahasia123!" }
+
+### 0b. Login mahasiswa uji
+# @name loginMhs
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "mhsuji", "password": "Rahasia123!" }
+
+### 0c. Login admin
+# @name loginAdmin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "admin", "password": "Rahasia123!" }
+
+### 1. Daftar kelas (200)
+GET {{base}}/courses
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+### 2. Daftar ke kelas yang masih kosong — IF101 (201)
+POST {{base}}/courses/1/enroll
+Content-Type: application/json
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+### 3. Daftar ke kelas yang sama sekali lagi (409 ALREADY_ENROLLED)
+POST {{base}}/courses/1/enroll
+Content-Type: application/json
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+### 4. Mahasiswa ke-6 ke IF399 berkuota 5 (409 COURSE_FULL — bukan 500)
+POST {{base}}/courses/13/enroll
+Content-Type: application/json
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+### 5. Batalkan kelas yang tidak pernah diambil — IF303 (409 NOT_ENROLLED)
+DELETE {{base}}/courses/5/enroll
+Content-Type: application/json
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+### 6. Pindah ke kelas yang penuh — IF101 -> IF399 (409 COURSE_FULL)
+POST {{base}}/enrollments/swap
+Content-Type: application/json
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+{ "from_course_id": 1, "to_course_id": 13 }
+
+### 7. KRS setelahnya — harus TETAP berisi IF101 (200)
+GET {{base}}/courses/mine
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+### 8. Pindah ke kelas yang masih kosong — IF101 -> IF102 (200, jauh di bawah 1 detik)
+POST {{base}}/enrollments/swap
+Content-Type: application/json
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+{ "from_course_id": 1, "to_course_id": 2 }
+
+### 9. Pindah dengan from = to (422 VALIDATION_ERROR)
+POST {{base}}/enrollments/swap
+Content-Type: application/json
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+{ "from_course_id": 2, "to_course_id": 2 }
+
+### 10. Lihat IF310 — catat "version"-nya (200)
+# @name kelas310
+GET {{base}}/courses/12
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### 11. Admin ubah kuota dengan version terbaru (200, version naik 1)
+PATCH {{base}}/courses/12
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "quota": 45, "version": {{kelas310.response.body.$.data.version}} }
+
+### 12. Admin ubah kuota dengan version LAMA (409 VERSION_CONFLICT)
+PATCH {{base}}/courses/12
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "quota": 50, "version": {{kelas310.response.body.$.data.version}} }
+
+### 13. Lihat IF399 — catat "version"-nya
+# @name kelas399
+GET {{base}}/courses/13
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+### 14. Admin menurunkan kuota IF399 di bawah jumlah peserta (409 QUOTA_BELOW_ENROLLED)
+PATCH {{base}}/courses/13
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.$.data.access_token}}
+
+{ "quota": 2, "version": {{kelas399.response.body.$.data.version}} }
+
+### 15. Mahasiswa mencoba mengubah kuota (403)
+PATCH {{base}}/courses/12
+Content-Type: application/json
+Authorization: Bearer {{loginMhs.response.body.$.data.access_token}}
+
+{ "quota": 99, "version": 1 }
