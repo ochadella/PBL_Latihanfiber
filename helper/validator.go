@@ -97,10 +97,16 @@ func messageFor(fe validator.FieldError) string {
 		if fe.Kind() == reflect.String {
 			return "minimal " + fe.Param() + " karakter"
 		}
+		if k := fe.Kind(); k == reflect.Slice || k == reflect.Array || k == reflect.Map {
+			return "minimal " + fe.Param() + " item"
+		}
 		return "nilai minimal " + fe.Param()
 	case "max":
 		if fe.Kind() == reflect.String {
 			return "maksimal " + fe.Param() + " karakter"
+		}
+		if k := fe.Kind(); k == reflect.Slice || k == reflect.Array || k == reflect.Map {
+			return "maksimal " + fe.Param() + " item"
 		}
 		return "nilai maksimal " + fe.Param()
 	case "alphanum":
