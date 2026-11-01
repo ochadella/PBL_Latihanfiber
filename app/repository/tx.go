@@ -59,6 +59,15 @@ func (m *TxManager) WithTx(ctx context.Context, fn func(tx DBTX) error) error {
 	return err
 }
 
+// WithTxOnce menjalankan fn di dalam satu transaction TANPA mencoba ulang.
+//
+// Dipakai bila fn memiliki efek samping di luar database yang tidak ikut
+// dibatalkan (misalnya enqueue ke Redis): retry otomatis akan mengulang efek
+// samping itu.
+func (m *TxManager) WithTxOnce(ctx context.Context, fn func(tx DBTX) error) error {
+	return m.runOnce(ctx, fn)
+}
+
 func (m *TxManager) runOnce(ctx context.Context, fn func(tx DBTX) error) error {
 	tx, err := m.pool.Begin(ctx)
 	if err != nil {

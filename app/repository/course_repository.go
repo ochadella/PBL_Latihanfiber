@@ -36,6 +36,7 @@ type CourseRepository interface {
 	DeleteEnrollment(ctx context.Context, courseID, userID int) error
 
 	UpdateQuota(ctx context.Context, id, quota, version int) (model.Course, error)
+	ListParticipantIDs(ctx context.Context, courseID int) ([]int, error)
 
 	// Modul 10: dipakai layanan ulasan (MongoDB) untuk memeriksa peserta kelas.
 	IsEnrolled(ctx context.Context, courseID, userID int) (bool, error)
@@ -290,6 +291,28 @@ func (r *coursePostgresRepository) UpdateQuota(ctx context.Context, id, quota, v
 		return model.Course{}, ErrVersionConflict
 	}
 	return model.Course{}, ErrQuotaBelowFilled
+}
+
+// ListParticipantIDs mengambil seluruh peserta sebuah kelas. Dipanggil di
+// dalam transaction yang sama dengan perubahan kuota, sehingga daftar
+// penerima adalah snapshot yang konsisten dengan perubahan itu.
+func (r *coursePostgresRepository) ListParticipantIDs(ctx context.Context, courseID int) ([]int, error) {
+	rows, err := r.db.Query(ctx,
+		"SELECT user_id FROM enrollments WHERE course_id = $1 ORDER BY user_id", courseID)
+	if err != nil {
+		return nil, fmt.Errorf("mengambil peserta kelas: %w", err)
+	}
+	defer rows.Close()
+
+	ids := []int{}
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("membaca peserta kelas: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // IsEnrolled dipakai layer lain — misalnya layanan ulasan di MongoDB — yang

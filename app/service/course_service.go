@@ -13,11 +13,16 @@ import (
 
 type CourseService struct {
 	courses repository.CourseRepository
+	outbox  repository.OutboxRepository
 	tx      *repository.TxManager
 }
 
-func NewCourseService(courses repository.CourseRepository, tx *repository.TxManager) *CourseService {
-	return &CourseService{courses: courses, tx: tx}
+func NewCourseService(
+	courses repository.CourseRepository,
+	outbox repository.OutboxRepository,
+	tx *repository.TxManager,
+) *CourseService {
+	return &CourseService{courses: courses, outbox: outbox, tx: tx}
 }
 
 // Kesalahan khusus layer service: aturan bisnis yang tidak diketahui
@@ -133,8 +138,19 @@ func (s *CourseService) Enroll(c *fiber.Ctx) error {
 			return err
 		}
 
-		// 4. Catat pendaftarannya. Bila ternyata sudah terdaftar, error
-		//    di sini membatalkan juga penambahan kursi pada langkah 3.
+		// 4. Catat event-nya ke outbox, memakai transaction yang sama.
+		//    Urutan di dalam transaction tidak mengubah hasil akhir: bila
+		//    langkah 5 gagal, catatan ini ikut dibatalkan bersama
+		//    penambahan kursi pada langkah 3.
+		if err := s.outbox.WithTx(tx).Insert(ctx, model.EventEnrollmentCreated, model.EnrollmentEvent{
+			UserID: current.UserID, CourseID: enrolled.ID,
+			CourseCode: enrolled.Code, CourseName: enrolled.Name,
+		}); err != nil {
+			return err
+		}
+
+		// 5. Catat pendaftarannya. Bila ternyata sudah terdaftar, error
+		//    di sini membatalkan seluruh langkah sebelumnya.
 		return repo.InsertEnrollment(ctx, courseID, current.UserID)
 	})
 	if err != nil {
@@ -170,8 +186,14 @@ func (s *CourseService) Drop(c *fiber.Ctx) error {
 		if err := repo.DeleteEnrollment(ctx, courseID, current.UserID); err != nil {
 			return err
 		}
-		_, err := repo.DecrementEnrolled(ctx, courseID)
-		return err
+		course, err := repo.DecrementEnrolled(ctx, courseID)
+		if err != nil {
+			return err
+		}
+		return s.outbox.WithTx(tx).Insert(ctx, model.EventEnrollmentDropped, model.EnrollmentEvent{
+			UserID: current.UserID, CourseID: course.ID,
+			CourseCode: course.Code, CourseName: course.Name,
+		})
 	})
 	if err != nil {
 		return translateCourseError(err)
@@ -258,7 +280,15 @@ func (s *CourseService) Swap(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
-		return repo.InsertEnrollment(ctx, req.ToCourseID, current.UserID)
+		if err := repo.InsertEnrollment(ctx, req.ToCourseID, current.UserID); err != nil {
+			return err
+		}
+		// Satu event "pindah", bukan dua event "keluar" dan "masuk".
+		// Mahasiswa melakukan satu tindakan, maka ia menerima satu notifikasi.
+		return s.outbox.WithTx(tx).Insert(ctx, model.EventEnrollmentSwapped, model.EnrollmentEvent{
+			UserID: current.UserID, CourseID: to.ID, CourseCode: to.Code, CourseName: to.Name,
+			FromCourseCode: from.Code, FromCourseName: from.Name,
+		})
 	})
 	if err != nil {
 		return translateCourseError(err)
@@ -287,9 +317,37 @@ func (s *CourseService) UpdateQuota(c *fiber.Ctx) error {
 		return helper.Validation(errs)
 	}
 
-	// Satu pernyataan UPDATE saja, sehingga tidak perlu WithTx:
-	// setiap pernyataan tunggal di PostgreSQL sudah atomik dengan sendirinya.
-	updated, err := s.courses.UpdateQuota(ctx, id, req.Quota, req.Version)
+	// Sejak ada outbox, perubahan kuota bukan lagi satu pernyataan:
+	// UPDATE courses dan INSERT outbox harus berhasil atau gagal bersama.
+	// Tanpa transaction, kuota bisa sudah berubah tetapi event-nya hilang
+	// (tidak ada email), atau event tercatat untuk perubahan yang batal.
+	var updated model.Course
+	err := s.tx.WithTx(ctx, func(tx repository.DBTX) error {
+		repo := s.courses.WithTx(tx)
+
+		current, err := repo.FindByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		updated, err = repo.UpdateQuota(ctx, id, req.Quota, req.Version)
+		if err != nil {
+			return err
+		}
+		if updated.Quota == current.Quota {
+			// Tidak ada perubahan nyata: tidak perlu mengirim email.
+			return nil
+		}
+
+		recipients, err := repo.ListParticipantIDs(ctx, id)
+		if err != nil {
+			return err
+		}
+		return s.outbox.WithTx(tx).Insert(ctx, model.EventCourseQuotaChanged,
+			model.QuotaChangedEvent{
+				CourseID: updated.ID, CourseCode: updated.Code, CourseName: updated.Name,
+				OldQuota: current.Quota, NewQuota: updated.Quota, Recipients: recipients,
+			})
+	})
 	if err != nil {
 		return translateCourseError(err)
 	}
