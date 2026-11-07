@@ -3,3 +3,6 @@
 *.exe
 .env
 logs/
+bukti/
+.env.test
+coverage.out

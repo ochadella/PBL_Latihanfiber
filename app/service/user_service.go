@@ -32,6 +32,23 @@ func NewUserService(
 }
 
 // ---------- GET /users ----------
+// List godoc
+//
+// @Summary      Daftar user (admin)
+// @Description  Cursor pagination. Kirim meta.next_cursor sebagai parameter cursor untuk halaman berikutnya. Header Accept: text/csv menghasilkan CSV.
+// @Tags         users
+// @Produce      json
+// @Produce      text/csv
+// @Param        limit      query     int     false  "Jumlah per halaman"  default(10)
+// @Param        search     query     string  false  "Cari berdasarkan username atau email"
+// @Param        is_active  query     bool    false  "Saring berdasarkan status aktif"
+// @Param        cursor     query     string  false  "Cursor dari meta.next_cursor"
+// @Success      200        {object}  model.WebResponse{data=[]model.User,meta=model.CursorMeta}
+// @Failure      400        {object}  model.ErrorResponse
+// @Failure      403        {object}  model.ErrorResponse  "Butuh permission user:list"
+// @Failure      406        {object}  model.ErrorResponse  "Format pada header Accept tidak didukung"
+// @Security     BearerAuth
+// @Router       /users [get]
 func (s *UserService) List(c *fiber.Ctx) error {
 	ctx, cancel := helper.RequestContext(c)
 	defer cancel()
@@ -75,6 +92,18 @@ func (s *UserService) List(c *fiber.Ctx) error {
 }
 
 // ---------- GET /users/:id ----------
+// Get godoc
+//
+// @Summary      Detail satu user
+// @Description  User biasa hanya boleh melihat dirinya sendiri; admin butuh permission user:read:any.
+// @Tags         users
+// @Produce      json
+// @Param        id   path      int  true  "ID user"
+// @Success      200  {object}  model.WebResponse{data=model.User}
+// @Failure      403  {object}  model.ErrorResponse
+// @Failure      404  {object}  model.ErrorResponse
+// @Security     BearerAuth
+// @Router       /users/{id} [get]
 func (s *UserService) Get(c *fiber.Ctx) error {
 	ctx, cancel := helper.RequestContext(c)
 	defer cancel()
@@ -103,6 +132,20 @@ func (s *UserService) Get(c *fiber.Ctx) error {
 }
 
 // ---------- POST /users ----------
+// Create godoc
+//
+// @Summary      Membuat user baru (admin)
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Param        body  body      model.CreateUserRequest  true  "Data user baru"
+// @Success      201   {object}  model.WebResponse{data=model.User}
+// @Header       201   {string}  Location  "URL user yang baru dibuat"
+// @Failure      403   {object}  model.ErrorResponse  "Butuh permission user:update:any"
+// @Failure      409   {object}  model.ErrorResponse  "Username atau email sudah dipakai"
+// @Failure      422   {object}  model.ErrorResponse
+// @Security     BearerAuth
+// @Router       /users [post]
 func (s *UserService) Create(c *fiber.Ctx) error {
 	ctx, cancel := helper.RequestContext(c)
 	defer cancel()
@@ -142,6 +185,20 @@ func (s *UserService) Create(c *fiber.Ctx) error {
 }
 
 // ---------- PUT /users/:id ----------
+// Replace godoc
+//
+// @Summary      Mengganti seluruh data user (PUT)
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Param        id    path      int                       true  "ID user"
+// @Param        body  body      model.ReplaceUserRequest  true  "Data lengkap pengganti"
+// @Success      200   {object}  model.WebResponse{data=model.User}
+// @Failure      403   {object}  model.ErrorResponse
+// @Failure      404   {object}  model.ErrorResponse
+// @Failure      422   {object}  model.ErrorResponse
+// @Security     BearerAuth
+// @Router       /users/{id} [put]
 func (s *UserService) Replace(c *fiber.Ctx) error {
 	ctx, cancel := helper.RequestContext(c)
 	defer cancel()
@@ -186,6 +243,21 @@ func (s *UserService) Replace(c *fiber.Ctx) error {
 }
 
 // ---------- PATCH /users/:id ----------
+// Patch godoc
+//
+// @Summary      Mengubah sebagian data user (PATCH)
+// @Description  Hanya field yang dikirim yang diubah.
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Param        id    path      int                     true  "ID user"
+// @Param        body  body      model.PatchUserRequest  true  "Field yang ingin diubah"
+// @Success      200   {object}  model.WebResponse{data=model.User}
+// @Failure      400   {object}  model.ErrorResponse  "Tidak ada field yang dikirim"
+// @Failure      403   {object}  model.ErrorResponse
+// @Failure      404   {object}  model.ErrorResponse
+// @Security     BearerAuth
+// @Router       /users/{id} [patch]
 func (s *UserService) Patch(c *fiber.Ctx) error {
 	ctx, cancel := helper.RequestContext(c)
 	defer cancel()
@@ -232,6 +304,20 @@ func (s *UserService) Patch(c *fiber.Ctx) error {
 
 // ---------- PATCH /users/:id/role ----------
 // Dijaga middleware dengan permission role:assign.
+// AssignRole godoc
+//
+// @Summary      Mengubah role user (admin)
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Param        id    path      int                      true  "ID user"
+// @Param        body  body      model.AssignRoleRequest  true  "Role baru"
+// @Success      200   {object}  model.WebResponse{data=model.User}
+// @Failure      403   {object}  model.ErrorResponse  "Butuh permission role:assign"
+// @Failure      404   {object}  model.ErrorResponse
+// @Failure      422   {object}  model.ErrorResponse  "Role tidak dikenal"
+// @Security     BearerAuth
+// @Router       /users/{id}/role [patch]
 func (s *UserService) AssignRole(c *fiber.Ctx) error {
 	ctx, cancel := helper.RequestContext(c)
 	defer cancel()
@@ -264,6 +350,16 @@ func (s *UserService) AssignRole(c *fiber.Ctx) error {
 }
 
 // ---------- DELETE /users/:id ----------
+// Delete godoc
+//
+// @Summary   Menghapus user (admin)
+// @Tags      users
+// @Param     id   path  int  true  "ID user"
+// @Success   204  "Berhasil dihapus; tanpa body"
+// @Failure   403  {object}  model.ErrorResponse  "Butuh permission user:delete"
+// @Failure   404  {object}  model.ErrorResponse
+// @Security     BearerAuth
+// @Router    /users/{id} [delete]
 func (s *UserService) Delete(c *fiber.Ctx) error {
 	ctx, cancel := helper.RequestContext(c)
 	defer cancel()

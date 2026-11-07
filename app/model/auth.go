@@ -46,3 +46,11 @@ type AuthUser struct {
 	Username string `json:"username"`
 	Role     string `json:"role"`
 }
+
+// Profile adalah isi field data pada GET /auth/me (D.3 Modul 12).
+// Sebelumnya disusun dengan fiber.Map sehingga swag tidak dapat
+// menjelaskan isinya.
+type Profile struct {
+	User        User     `json:"user"`
+	Permissions []string `json:"permissions"`
+}
